@@ -1654,7 +1654,7 @@ function reduceCrossings(g: Graph, nodes: LNode[]): number {
   const { n, real, maxRank, W, EF, ET, EFD, ETD, succStart, succE, predStart, predE, layerStart, order, pos, offsets, fixed, GRP, groupParent } = g;
   let widest = 0;
   for (let r = 0; r <= maxRank; r++) widest = Math.max(widest, layerStart[r + 1] - layerStart[r]);
-  if (widest < 2) return;
+  if (widest < 2) return 0;
   // With offsets, edges that reach one node at different offsets take separate places along it.
   const place = offsets ? new Int32Array(EF.length) : undefined;
   let size = 1;
