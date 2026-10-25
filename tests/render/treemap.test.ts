@@ -213,8 +213,12 @@ describe('treemap rendering', () => {
     );
     expect(svg).toMatch(/font-weight="var\(--_hw\)">A sect[^<]*…</);
     expect(svg).toMatch(/font-size="(9|1[0-5])">A leaf with[^<]*</);
-    expect(svg).not.toContain('>tiny<');
+    expect(svg).not.toMatch(/<text[^>]*>tiny</);
     expect(rects(svg).some((r) => r.id === 'tiny')).toBe(true);
+    // What is cut short or left out is named in full in a tooltip; what is drawn whole is not.
+    expect(svg).toContain('<title>tiny</title>');
+    expect(svg).toContain('<title>A section with a very long name indeed</title>');
+    expect(svg).not.toContain('<title>other</title>');
   });
 
   it('draws the title above, from the diagram or the front matter', () => {

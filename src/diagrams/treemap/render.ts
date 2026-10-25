@@ -57,6 +57,8 @@ export function renderTreemap(model: TreemapModel, config: Config, options: Rend
     const name = decodeEntities(node.name).trim();
     const value = showValues ? format(b.value) : '';
     const group = `data-id="${escText(node.name)}">`;
+    // A name that is cut short or left out is given in full as a tooltip.
+    const tooltip = (drawn: string | undefined): string => (drawn === name || name === '' ? '' : `<title>${esc(name)}</title>`);
     const rect = `<rect x="${num(x)}" y="${num(y)}" width="${num(b.w)}" height="${num(b.h)}" fill="${color}"`;
     // A class's font size is a style, which wins over the size written here, so text is cut to fit
     // at that size rather than shrunk.
@@ -65,6 +67,7 @@ export function renderTreemap(model: TreemapModel, config: Config, options: Rend
 
     if (node.children !== undefined) {
       let text = '';
+      let drawn: string | undefined;
       if (b.headed) {
         const labelSize = fixed ?? small;
         const valueSize = fixed ?? tiny;
@@ -76,6 +79,7 @@ export function renderTreemap(model: TreemapModel, config: Config, options: Rend
             ? fitText(name, withValue ? room - valueWidth - 12 : room, labelSize, labelSize, measurer, textStyle | Style.Bold)
             : undefined;
         const baseline = y + HEADER / 2 + 1;
+        drawn = label?.text;
         if (label) {
           text += `<text x="${num(x + SIDE + 2)}" y="${num(baseline + labelSize * 0.35)}" font-weight="var(--_hw)"${style.text}>${esc(label.text)}</text>`;
         }
@@ -86,7 +90,7 @@ export function renderTreemap(model: TreemapModel, config: Config, options: Rend
       // A section is a tint of its color, unless a class gives it a fill of its own.
       const tint = /[";]fill:/.test(style.shape) ? '' : ' fill-opacity="0.12"';
       sections +=
-        `<g class="pele-node pele-section${classNames(node.classSelector ?? '')}" ${group}` +
+        `<g class="pele-node pele-section${classNames(node.classSelector ?? '')}" ${group}${tooltip(drawn)}` +
         `${rect}${rounded(`${tint} stroke="${color}"${style.shape}`)}/>${text}</g>`;
       continue;
     }
@@ -111,7 +115,7 @@ export function renderTreemap(model: TreemapModel, config: Config, options: Rend
         text = `<text x="${cx}" y="${num(cy + label.size * 0.35)}" font-size="${num(label.size)}"${style.text}>${esc(label.text)}</text>`;
       }
     }
-    leaves += `<g class="pele-node pele-leaf${classNames(node.classSelector ?? '')}" ${group}${rect}${rounded(style.shape)}/>${text}</g>`;
+    leaves += `<g class="pele-node pele-leaf${classNames(node.classSelector ?? '')}" ${group}${tooltip(label?.text)}${rect}${rounded(style.shape)}/>${text}</g>`;
   }
 
   const totalWidth = Math.ceil(Math.max(width, title.width) + 2 * pad);
