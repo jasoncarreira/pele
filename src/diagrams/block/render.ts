@@ -478,6 +478,7 @@ function draw(model: BlockModel, config: Config, options: RenderOptions, tight: 
   const check = drawn.length * obstacles.length <= OBSTACLE_BUDGET ? obstacles : undefined;
   const seen = new Map<number, number>();
   const routes: Route[] = [];
+  const labelPairs = new Map<number, number[]>();
   let minX = 0;
   let minY = 0;
   let maxX = content.width;
@@ -516,8 +517,124 @@ function draw(model: BlockModel, config: Config, options: RenderOptions, tight: 
       lx = points[at] + (points[at + 2] - points[at]) * spot;
       ly = points[at + 1] + (points[at + 3] - points[at + 1]) * spot;
     }
-    if (label.width > 0) grow(lx, ly, label.width + 8, label.height);
+    if (label.width > 0 && s !== t && total > 1) {
+      const group = labelPairs.get(key);
+      if (group) group.push(i);
+      else labelPairs.set(key, [i]);
+    }
     routes.push({ edge: drawn[i], points, loop: s === t ? k + 1 : 0, label, lx, ly });
+  }
+
+  let labelChecks = OBSTACLE_BUDGET;
+  let labelLeft = Infinity;
+  let labelRight = -Infinity;
+  let labelTop = Infinity;
+  let labelBottom = -Infinity;
+  const includeLabel = (route: Route): void => {
+    if (route.label.width === 0) return;
+    labelLeft = Math.min(labelLeft, route.lx - (route.label.width + 8) / 2);
+    labelRight = Math.max(labelRight, route.lx + (route.label.width + 8) / 2);
+    labelTop = Math.min(labelTop, route.ly - route.label.height / 2);
+    labelBottom = Math.max(labelBottom, route.ly + route.label.height / 2);
+  };
+  for (const route of routes) includeLabel(route);
+  for (const group of labelPairs.values()) {
+    if (group.length < 2) continue;
+    let overlaps = false;
+    for (let a = 0; a < group.length && !overlaps; a++) {
+      for (let b = a + 1; b < group.length; b++) {
+        const first = routes[group[a]];
+        const second = routes[group[b]];
+        // Repack conservatively when the shared comparison budget is exhausted.
+        if (
+          labelChecks-- <= 0 ||
+          (Math.abs(first.lx - second.lx) < (first.label.width + second.label.width + 16) / 2 &&
+            Math.abs(first.ly - second.ly) < (first.label.height + second.label.height) / 2)
+        ) {
+          overlaps = true;
+          break;
+        }
+      }
+    }
+    if (!overlaps) continue;
+    const [s, t] = ends[group[0]];
+    const vertical = Math.abs(t.y - s.y) >= Math.abs(t.x - s.x);
+    const center = (i: number): number => vertical ? routes[i].lx : routes[i].ly;
+    const extent = (i: number): number => vertical ? routes[i].label.width + 8 : routes[i].label.height;
+    group.sort((a, b) => center(a) - center(b) || a - b);
+    let left = Infinity;
+    let right = -Infinity;
+    let length = -4;
+    for (const i of group) {
+      left = Math.min(left, center(i) - extent(i) / 2);
+      right = Math.max(right, center(i) + extent(i) / 2);
+      length += extent(i) + 4;
+    }
+    let next = (left + right - length) / 2;
+    // Move only this packed bucket if its wider lanes would cover a neighboring label.
+    let low = Infinity;
+    let high = -Infinity;
+    for (const i of group) {
+      const route = routes[i];
+      const along = vertical ? route.ly : route.lx;
+      const half = (vertical ? route.label.height : route.label.width + 8) / 2;
+      low = Math.min(low, along - half);
+      high = Math.max(high, along + half);
+    }
+    let before = Infinity;
+    let after = -Infinity;
+    let blocked = false;
+    if (routes.length * group.length <= labelChecks) {
+      labelChecks -= routes.length * group.length;
+      const members = new Set(group);
+      for (let i = 0; i < routes.length; i++) {
+        const route = routes[i];
+        if (members.has(i) || route.label.width === 0) continue;
+        const along = vertical ? route.ly : route.lx;
+        const half = (vertical ? route.label.height : route.label.width + 8) / 2;
+        if (along + half <= low || along - half >= high) continue;
+        const across = vertical ? route.lx : route.ly;
+        const reach = (vertical ? route.label.width + 8 : route.label.height) / 2;
+        before = Math.min(before, across - reach - length - 4);
+        after = Math.max(after, across + reach + 4);
+        let lane = next;
+        for (const member of group) {
+          const packed = routes[member];
+          const packedAlong = vertical ? packed.ly : packed.lx;
+          const packedHalf = (vertical ? packed.label.height : packed.label.width + 8) / 2;
+          const width = extent(member);
+          if (Math.abs(along - packedAlong) < half + packedHalf && across - reach < lane + width && across + reach > lane) {
+            blocked = true;
+          }
+          lane += width + 4;
+        }
+      }
+    } else {
+      // Above the comparison budget, the cached envelope gives a finite conservative placement.
+      before = (vertical ? labelLeft : labelTop) - length - 4;
+      after = (vertical ? labelRight : labelBottom) + 4;
+      blocked = true;
+    }
+    if (blocked) next = next - before <= after - next ? before : after;
+    for (const i of group) {
+      const route = routes[i];
+      const at = next + extent(i) / 2;
+      next += extent(i) + 4;
+      if (vertical) route.lx = at;
+      else route.ly = at;
+      // Endpoint clamping can collapse parallel lanes. Bend through the measured label lane instead.
+      const [from, to] = ends[i];
+      const start: number[] = [];
+      const end: number[] = [];
+      border(from, route.lx, route.ly, start);
+      border(to, route.lx, route.ly, end);
+      route.points = [...start, route.lx, route.ly, ...end];
+      includeLabel(route);
+    }
+  }
+  for (const route of routes) {
+    if (route.label.width > 0) grow(route.lx, route.ly, route.label.width + 8, route.label.height);
+    for (let i = 0; i < route.points.length; i += 2) grow(route.points[i], route.points[i + 1], 0, 0);
   }
 
   const title = titleLabel(model.title, measurer, size, tight ? titleRoom(options) : 4000);
