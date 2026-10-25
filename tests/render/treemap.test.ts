@@ -3,7 +3,7 @@ import { formatter } from '../../src/diagrams/treemap/format.js';
 import { layoutTreemap, type Box } from '../../src/diagrams/treemap/layout.js';
 import type { TreemapNode } from '../../src/diagrams/treemap/model.js';
 import { parse, render, supports } from '../../src/index.js';
-import { metricsMeasurer } from '../../src/text/measurer.js';
+import { Style, metricsMeasurer } from '../../src/text/measurer.js';
 import { elements } from '../support/xml.js';
 
 const options = { measurer: metricsMeasurer };
@@ -265,6 +265,24 @@ describe('treemap rendering', () => {
     const { svg } = render(src, options);
     expect(svg.match(/class="pele-node pele-leaf"/g)?.length).toBe(leaves);
     expect(svg.match(/class="pele-node pele-section"/g)?.length).toBe(sections);
+  });
+
+  it('fits text at the font size a class sets', () => {
+    const { svg } = render(
+      'treemap\n"A section with a long name":::head\n  "A leaf with a fairly long name": 30:::big\n  "Another leaf with a long name": 20:::big\n  "rest": 400\nclassDef big font-size:20px\nclassDef head font-size:18px',
+      options
+    );
+    const groups = [...svg.matchAll(/<g class="pele-node pele-(leaf|section) (big|head)"[^>]*>(.*?)<\/g>/g)];
+    expect(groups.length).toBe(3);
+    for (const [, kind, , body] of groups) {
+      const w = Number(/<rect[^>]* width="([\d.]+)"/.exec(body)![1]);
+      const texts = [...body.matchAll(/<text[^>]*>([^<]*)<\/text>/g)].map((m) => m[1]);
+      expect(texts.length).toBeGreaterThan(0);
+      for (const text of texts) {
+        const width = kind === 'leaf' ? metricsMeasurer.width(text, 20, 0) : metricsMeasurer.width(text, 18, Style.Bold);
+        expect(width, text).toBeLessThanOrEqual(w - 8);
+      }
+    }
   });
 
   it('draws the title above, from the diagram or the front matter', () => {
