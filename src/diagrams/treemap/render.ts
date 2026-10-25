@@ -61,7 +61,7 @@ export function renderTreemap(model: TreemapModel, config: Config, options: Rend
 
     if (node.children !== undefined) {
       let text = '';
-      if (b.h >= HEADER) {
+      if (b.headed) {
         const room = b.w - 2 * SIDE - 4;
         const valueWidth = value ? measurer.width(value, tiny, 0) : 0;
         const withValue = valueWidth > 0 && room - valueWidth - 12 >= 3 * small;
