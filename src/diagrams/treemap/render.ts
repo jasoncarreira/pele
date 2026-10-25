@@ -58,20 +58,29 @@ export function renderTreemap(model: TreemapModel, config: Config, options: Rend
     const value = showValues ? format(b.value) : '';
     const group = `data-id="${escText(node.name)}">`;
     const rect = `<rect x="${num(x)}" y="${num(y)}" width="${num(b.w)}" height="${num(b.h)}" fill="${color}"`;
+    // A class's font size is a style, which wins over the size written here, so text is cut to fit
+    // at that size rather than shrunk.
+    const fixed = style.fontSize;
+    const textStyle = (style.bold ? Style.Bold : 0) | (style.italic ? Style.Italic : 0);
 
     if (node.children !== undefined) {
       let text = '';
       if (b.headed) {
+        const labelSize = fixed ?? small;
+        const valueSize = fixed ?? tiny;
         const room = b.w - 2 * SIDE - 4;
-        const valueWidth = value ? measurer.width(value, tiny, 0) : 0;
-        const withValue = valueWidth > 0 && room - valueWidth - 12 >= 3 * small;
-        const label = fitText(name, withValue ? room - valueWidth - 12 : room, small, small, measurer, Style.Bold);
+        const valueWidth = value ? measurer.width(value, valueSize, textStyle) : 0;
+        const withValue = valueWidth > 0 && room - valueWidth - 12 >= 3 * labelSize;
+        const label =
+          labelSize * LINE <= HEADER - 4
+            ? fitText(name, withValue ? room - valueWidth - 12 : room, labelSize, labelSize, measurer, textStyle | Style.Bold)
+            : undefined;
         const baseline = y + HEADER / 2 + 1;
         if (label) {
-          text += `<text x="${num(x + SIDE + 2)}" y="${num(baseline + small * 0.35)}" font-weight="var(--_hw)"${style.text}>${esc(label.text)}</text>`;
+          text += `<text x="${num(x + SIDE + 2)}" y="${num(baseline + labelSize * 0.35)}" font-weight="var(--_hw)"${style.text}>${esc(label.text)}</text>`;
         }
-        if (withValue) {
-          text += `<text class="pele-value" x="${num(x + b.w - SIDE - 2)}" y="${num(baseline + tiny * 0.35)}" font-size="${tiny}" text-anchor="end" fill="var(--_m)"${style.text}>${esc(value)}</text>`;
+        if (withValue && valueSize * LINE <= HEADER - 4) {
+          text += `<text class="pele-value" x="${num(x + b.w - SIDE - 2)}" y="${num(baseline + valueSize * 0.35)}" font-size="${tiny}" text-anchor="end" fill="var(--_m)"${style.text}>${esc(value)}</text>`;
         }
       }
       // A section is a tint of its color, unless a class gives it a fill of its own.
@@ -84,14 +93,15 @@ export function renderTreemap(model: TreemapModel, config: Config, options: Rend
 
     let text = '';
     const room = b.w - 8;
-    const tallest = Math.min(size, Math.floor((b.h - 4) / LINE));
-    const label = tallest >= least ? fitText(name, room, tallest, least, measurer) : undefined;
+    const smallest = fixed ?? least;
+    const tallest = Math.min(fixed ?? size, Math.floor((b.h - 4) / LINE));
+    const label = tallest >= smallest ? fitText(name, room, tallest, smallest, measurer, textStyle) : undefined;
     if (label) {
       const cx = num(x + b.w / 2);
       const cy = y + b.h / 2;
-      const valueSize = Math.max(least, Math.round(label.size * 0.8));
+      const valueSize = fixed ?? Math.max(least, Math.round(label.size * 0.8));
       const lines = (label.size + valueSize) * LINE;
-      if (value && lines <= b.h - 4 && measurer.width(value, valueSize, 0) <= room) {
+      if (value && lines <= b.h - 4 && measurer.width(value, valueSize, textStyle) <= room) {
         const first = cy - lines / 2 + (label.size * LINE) / 2;
         const second = cy + lines / 2 - (valueSize * LINE) / 2;
         text =
